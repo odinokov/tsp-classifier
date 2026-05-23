@@ -611,10 +611,6 @@ python3 -c "import numpy as np; from tspfs import TSPClassifier; X=np.array([[2.
 - Gui, T. (2014). [A Pairwise Feature Selection Method For Gene Data Using Information Gain](https://egrove.olemiss.edu/etd/943/). M.S. thesis, University of Mississippi, Electronic Theses and Dissertations 943.
 - Bari, M. G., Salekin, S., & Zhang, J. (2017). [A Robust and Efficient Feature Selection Algorithm for Microarray Data](https://onlinelibrary.wiley.com/doi/10.1002/minf.201600099). *Molecular Informatics*, 36, 1600099. https://doi.org/10.1002/minf.201600099
 - Lin, X., Huang, X., Zhou, L., Ren, W., Zeng, J., Yao, W., & Wang, X. (2019). [The Robust Classification Model Based on Combinatorial Features](https://ieeexplore.ieee.org/document/8126830/). *IEEE/ACM Transactions on Computational Biology and Bioinformatics*, 16(2), 650-657. https://doi.org/10.1109/TCBB.2017.2779512
-- [decoupler toy dataset API](https://decoupler.readthedocs.io/en/latest/api/generated/decoupler.ds.toy.html)
-- [scikit-learn model persistence guide](https://scikit-learn.org/stable/model_persistence.html)
-- [skops secure persistence guide](https://skops.readthedocs.io/en/stable/persistence.html)
-- [joblib persistence documentation](https://joblib.readthedocs.io/en/latest/persistence.html)
 
 ## License
 
