@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "tspfs"
+version = "0.1.0"
+description = "A Python package implementing the Top-Scoring Pairs (TSP) algorithm for feature selection (demo)."
+authors = ["Denis Odinokov"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+numpy = "^2"
+numba = "^0.60.0"
+scipy = "^1.14.1"
+
+
+[tool.poetry.group.dev.dependencies]
+pydoc-markdown = "^4.8.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
