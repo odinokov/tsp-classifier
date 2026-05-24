@@ -22,3 +22,15 @@ pydoc-markdown = "^4.8.2"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "NPY"]
+ignore = [
+    "N803",  # sklearn convention: uppercase X for feature matrices
+    "N806",  # sklearn convention: uppercase X in function bodies
+    "N999",  # package name is intentionally CamelCase
+]

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from itertools import combinations
-from typing import Any, List, Optional, Union
+from typing import Any
 
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
@@ -28,13 +28,13 @@ class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
 
     def __init__(
         self,
-        n_pairs: Union[int, str] = 1,
+        n_pairs: int | str = 1,
         *,
         max_pairs: int = 10,
-        cv: Optional[Any] = None,
+        cv: Any | None = None,
         multiclass: str = "ovr",
         exact_pairs: bool = False,
-        max_features: Optional[int] = 512,
+        max_features: int | None = 512,
     ) -> None:
         self.n_pairs = n_pairs
         self.max_pairs = max_pairs
@@ -43,7 +43,7 @@ class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
         self.exact_pairs = exact_pairs
         self.max_features = max_features
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> "TSPClassifier":
+    def fit(self, X: np.ndarray, y: np.ndarray) -> TSPClassifier:
         X_checked, y_checked = check_X_y(X, y, dtype=np.float64, ensure_all_finite=True)
         check_classification_targets(y_checked)
         X_checked = np.ascontiguousarray(X_checked, dtype=np.float64)
@@ -219,9 +219,7 @@ class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
         else:
             k = int(self.n_pairs)
             if k > max_possible:
-                raise ValueError(
-                    f"n_pairs={k} needs at least {2 * k} features; got {X.shape[1]}."
-                )
+                raise ValueError(f"n_pairs={k} needs at least {2 * k} features; got {X.shape[1]}.")
 
         return self._fit_binary_fixed(X, y01, negative_class, positive_class, k)
 
@@ -275,7 +273,7 @@ class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
 
         order = np.lexsort((pair_j, pair_i, -gamma, -delta_num))
         used = np.zeros(X.shape[1], dtype=bool)
-        selected: List[int] = []
+        selected: list[int] = []
         for pair_idx in order:
             gi = int(pair_i[pair_idx])
             gj = int(pair_j[pair_idx])

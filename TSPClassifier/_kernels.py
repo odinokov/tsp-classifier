@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Tuple
-
 import numpy as np
 from numba import njit, prange
 
@@ -36,7 +34,7 @@ def _score_pairs_numba(
     features: np.ndarray,
     n_negative: int,
     n_positive: int,
-) -> Tuple[
+) -> tuple[
     np.ndarray,
     np.ndarray,
     np.ndarray,

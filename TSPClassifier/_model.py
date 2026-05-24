@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
@@ -23,7 +23,7 @@ class _BinaryTSPModel:
 def _positive_fraction(
     X: np.ndarray,
     model: _BinaryTSPModel,
-    upto: Optional[int] = None,
+    upto: int | None = None,
 ) -> np.ndarray:
     k = model.k if upto is None else min(int(upto), model.k)
     votes = np.zeros(X.shape[0], dtype=np.float64)

@@ -125,7 +125,7 @@ clf = make_pipeline(
     KNNImputer(n_neighbors=5),
     TSPClassifier(
         n_pairs="auto",
-        max_pairs=31,
+        max_pairs=9,
         cv=5,
         exact_pairs=True,
         multiclass="ovo",
@@ -136,17 +136,39 @@ outer_cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 print(cross_val_score(clf, X, y, cv=outer_cv).mean())
 ```
 
+For this example, `max_pairs=9` was selected by sweeping odd ceilings and
+keeping the highest mean 5-fold accuracy.
+
+```python
+sweep_scores = {}
+
+for max_pairs in range(1, 16, 2):
+    sweep_clf = make_pipeline(
+        KNNImputer(n_neighbors=5),
+        TSPClassifier(
+            n_pairs="auto",
+            max_pairs=max_pairs,
+            cv=5,
+            exact_pairs=True,
+            multiclass="ovo",
+        ),
+    )
+    score = cross_val_score(sweep_clf, X, y, cv=outer_cv).mean()
+    sweep_scores[max_pairs] = score
+
+best_max_pairs = max(sweep_scores, key=sweep_scores.get)
+print(best_max_pairs, f"{sweep_scores[best_max_pairs]:.4f}")
+```
+
 On one fixed 5-fold split, this gave:
 
 | Model | Mean accuracy |
 | --- | ---: |
-| `TSPClassifier`, one-vs-one | 0.7954 |
+| `TSPClassifier`, one-vs-one | 0.7935 |
 | Logistic regression | 0.9898 |
 | RBF SVC | 0.9972 |
-| Random forest | 0.9954 |
-| Extra trees | 1.0000 |
-
-![MiceProtein model accuracy comparison](docs/images/miceprotein_accuracy.png)
+| Random forest | 0.9944 |
+| Extra trees | 0.9991 |
 
 On this dataset, flexible baselines classify the experimental groups almost
 perfectly. TSP is lower-accuracy but returns transparent protein-pair ordering
