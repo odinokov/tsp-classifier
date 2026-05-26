@@ -24,6 +24,10 @@ class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
     Input matrices follow scikit-learn orientation: ``(n_samples, n_features)``.
     By default the estimator uses a rank-based feature screen before exact
     scoring of candidate pairs. Set ``exact_pairs=True`` to score all pairs.
+
+    Like other mutable scikit-learn estimators, ``fit`` updates this instance in
+    place. Use separate estimator instances for concurrent fitting; read-only
+    prediction on an already fitted instance is safe.
     """
 
     def __init__(

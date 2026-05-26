@@ -561,6 +561,14 @@ in parallel. That makes the classifier multi-threaded, but actual core usage
 depends on Numba settings, workload size, and the available CPU resources; it
 does not guarantee that every core will be saturated in every run.
 
+`TSPClassifier` follows the usual scikit-learn estimator contract: `fit()`
+mutates the estimator in place. Do not call `fit()` concurrently on the same
+instance, and do not call `predict()`, `transform()`, or `decision_function()`
+on an instance while another thread is fitting it. Concurrent read-only
+prediction on an already fitted instance is supported by the implementation.
+For parallel fitting, create one estimator instance per worker, for example with
+`sklearn.base.clone`.
+
 ## Validation
 
 Check package metadata:
