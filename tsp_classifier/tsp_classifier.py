@@ -108,10 +108,7 @@ class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
             return _predict_binary_model(X_checked, self.estimators_[0])
 
         if self.multiclass == "ovr":
-            scores = np.column_stack(
-                [_positive_fraction(X_checked, model) for model in self.estimators_]
-            )
-            return self.classes_[np.argmax(scores, axis=1)]
+            return self.classes_[np.argmax(self._ovr_scores(X_checked), axis=1)]
 
         votes = np.zeros((X_checked.shape[0], self.classes_.size), dtype=np.int32)
         margins = np.zeros((X_checked.shape[0], self.classes_.size), dtype=np.float64)
@@ -128,22 +125,11 @@ class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
             margins[:, positive_idx] += margin
             margins[:, negative_idx] -= margin
 
-        pred_idx = np.empty(X_checked.shape[0], dtype=np.intp)
-        for sample_idx in range(X_checked.shape[0]):
-            best_idx = 0
-            best_votes = votes[sample_idx, 0]
-            best_margin = margins[sample_idx, 0]
-            for class_idx in range(1, self.classes_.size):
-                class_votes = votes[sample_idx, class_idx]
-                class_margin = margins[sample_idx, class_idx]
-                if class_votes > best_votes or (
-                    class_votes == best_votes and class_margin > best_margin
-                ):
-                    best_idx = class_idx
-                    best_votes = class_votes
-                    best_margin = class_margin
-            pred_idx[sample_idx] = best_idx
-        return self.classes_[pred_idx]
+        # Argmax by (votes, margin) lexicographically, ties to the lowest index.
+        # |margin| <= (C - 1) / 2, so margin / C stays in (-0.5, 0.5) and can
+        # never bridge a one-vote gap; argmax reproduces the manual tie-break.
+        combined = votes + margins / self.classes_.size
+        return self.classes_[np.argmax(combined, axis=1)]
 
     def transform(self, X: np.ndarray) -> np.ndarray:
         check_is_fitted(self, "estimators_")
@@ -160,9 +146,7 @@ class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
         if self.classes_.size == 2:
             return _positive_fraction(X_checked, self.estimators_[0]) - 0.5
         if self.multiclass == "ovr":
-            return np.column_stack(
-                [_positive_fraction(X_checked, model) for model in self.estimators_]
-            )
+            return self._ovr_scores(X_checked)
 
         votes = np.zeros((X_checked.shape[0], self.classes_.size), dtype=np.float64)
         class_to_index = {cls: idx for idx, cls in enumerate(self.classes_)}
@@ -173,6 +157,11 @@ class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
             votes[:, positive_idx] += score
             votes[:, negative_idx] -= score
         return votes
+
+    def _ovr_scores(self, X: np.ndarray) -> np.ndarray:
+        return np.column_stack(
+            [_positive_fraction(X, model) for model in self.estimators_]
+        )
 
     def _validate_parameters(self) -> None:
         if self.n_pairs != "auto":
