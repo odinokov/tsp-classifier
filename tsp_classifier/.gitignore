@@ -1,6 +1,0 @@
-__pycache__/
-*.py[cod]
-CLAUDE.local.md
-
-# slop-detector governance config
-.slopconfig.yaml

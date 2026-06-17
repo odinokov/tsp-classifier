@@ -1,27 +1,29 @@
-[tool.poetry]
-name = "tsp-classifier"
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tspfs"
 version = "0.1.0"
 description = "A scikit-learn compatible Top-Scoring Pairs (TSP/k-TSP) classifier."
-authors = ["Denis Odinokov"]
-license = "MIT"
+authors = [{ name = "Denis Odinokov" }]
+license = { text = "MIT" }
 readme = "README.md"
-repository = "https://github.com/odinokov/tsp-classifier"
-packages = [{ include = "tsp_classifier" }]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=2",
+    "numba>=0.60",
+    "scikit-learn>=1.6",
+]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-numpy = "^2"
-numba = "^0.60.0"
-scipy = "^1.14.1"
-scikit-learn = "^1.6"
+[project.urls]
+Repository = "https://github.com/odinokov/tsp-classifier"
 
+[project.optional-dependencies]
+dev = ["pytest>=8", "mypy>=1.10"]
 
-[tool.poetry.group.dev.dependencies]
-pydoc-markdown = "^4.8.2"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.hatch.build.targets.wheel]
+packages = ["src/tspfs"]
 
 [tool.ruff]
 line-length = 100
@@ -33,3 +35,16 @@ ignore = [
     "N803",  # sklearn convention: uppercase X for feature matrices
     "N806",  # sklearn convention: uppercase X in function bodies
 ]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+files = ["src/tspfs"]
+# numpy's ndarray generics and sklearn's missing py.typed make full strictness
+# impractical without annotation noise that adds no safety; relax only these.
+disallow_any_generics = false
+disallow_subclassing_any = false
+
+[[tool.mypy.overrides]]
+module = ["numba.*", "sklearn.*"]
+ignore_missing_imports = true

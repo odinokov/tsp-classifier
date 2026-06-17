@@ -1,6 +1,6 @@
-# tsp-classifier
+# tspfs
 
-`tsp-classifier` is a scikit-learn compatible implementation of Top-Scoring
+`tspfs` is a scikit-learn compatible implementation of Top-Scoring
 Pairs (TSP/k-TSP) classifiers for gene expression and other high-dimensional
 biological matrices. The main estimator is `TSPClassifier`.
 
@@ -47,16 +47,16 @@ From GitHub:
 pip install git+https://github.com/odinokov/tsp-classifier.git
 ```
 
-For development:
+For development (includes pytest and mypy):
 
 ```bash
-poetry install
+pip install -e ".[dev]"
 ```
 
 Core dependencies:
 
 ```bash
-pip install numpy numba scipy scikit-learn
+pip install numpy numba scikit-learn
 ```
 
 Optional packages used in persistence examples:
@@ -69,7 +69,7 @@ pip install skops joblib
 
 ```python
 import numpy as np
-from tsp_classifier import TSPClassifier
+from tspfs import TSPClassifier
 
 X = np.array(
     [
@@ -145,6 +145,13 @@ Learned attributes for binary models:
 
 For multiclass models, binary submodels are stored in `estimators_`, and their
 tasks are stored in `tasks_`.
+
+### Errors
+
+Invalid parameters or data raise `TSPValueError` / `TSPTypeError`, both of which
+subclass the matching built-in (`ValueError` / `TypeError`) and the package base
+`TSPError`. Existing `except ValueError`/`except TypeError` handlers keep working;
+catch `tspfs.TSPError` to handle any tspfs-specific error.
 
 ## Scoring Modes
 
@@ -243,7 +250,7 @@ Or use a scikit-learn splitter:
 
 ```python
 from sklearn.model_selection import StratifiedKFold
-from tsp_classifier import TSPClassifier
+from tspfs import TSPClassifier
 
 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 k_ceiling = 9
@@ -288,7 +295,7 @@ For `C` classes, one-vs-one trains `C * (C - 1) / 2` binary TSP models.
 
 ```python
 from sklearn.model_selection import cross_val_score
-from tsp_classifier import TSPClassifier
+from tspfs import TSPClassifier
 
 clf = TSPClassifier(n_pairs=1, exact_pairs=True)
 scores = cross_val_score(clf, X, y, cv=5)
@@ -468,8 +475,8 @@ from pathlib import Path
 import numpy as np
 import skops.io as sio
 import sklearn
-import tsp_classifier
-from tsp_classifier import TSPClassifier
+import tspfs
+from tspfs import TSPClassifier
 
 model_path = "tsp_model.skops"
 metadata_path = "tsp_model_metadata.json"
@@ -483,7 +490,7 @@ metadata = {
     "python": platform.python_version(),
     "numpy": np.__version__,
     "scikit_learn": sklearn.__version__,
-    "tsp_classifier": tsp_classifier.__version__,
+    "tspfs": tspfs.__version__,
 }
 Path(metadata_path).write_text(json.dumps(metadata, indent=2))
 ```
@@ -574,13 +581,13 @@ For parallel fitting, create one estimator instance per worker, for example with
 Check package metadata:
 
 ```bash
-poetry check
+python -m build --sdist
 ```
 
 Run a direct import and prediction smoke test:
 
 ```bash
-python3 -c "import numpy as np; from tsp_classifier import TSPClassifier; X=np.array([[2.,3.,1.,4.],[2.,3.,1.,4.],[3.,2.,4.,1.],[3.,2.,4.,1.]]); y=np.array([0,0,1,1]); clf=TSPClassifier(n_pairs=1, exact_pairs=True).fit(X,y); print(clf.pairs_); print(clf.predict(X))"
+python3 -c "import numpy as np; from tspfs import TSPClassifier; X=np.array([[2.,3.,1.,4.],[2.,3.,1.,4.],[3.,2.,4.,1.],[3.,2.,4.,1.]]); y=np.array([0,0,1,1]); clf=TSPClassifier(n_pairs=1, exact_pairs=True).fit(X,y); print(clf.pairs_); print(clf.predict(X))"
 ```
 
 ## MiceProtein OpenML Example
@@ -600,7 +607,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 
-from tsp_classifier import TSPClassifier
+from tspfs import TSPClassifier
 
 mice = fetch_openml(name="miceprotein", version=4, as_frame=True, parser="auto")
 X = mice.data.to_numpy(dtype=float)

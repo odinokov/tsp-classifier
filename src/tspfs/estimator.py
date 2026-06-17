@@ -1,7 +1,9 @@
+"""scikit-learn compatible Top-Scoring Pairs (TSP/k-TSP) classifier."""
+
 from __future__ import annotations
 
 from itertools import combinations
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
@@ -16,6 +18,7 @@ from ._model import (
     _predict_binary_model,
     _vote_matrix,
 )
+from .errors import TSPTypeError, TSPValueError
 
 
 class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
@@ -28,7 +31,22 @@ class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
     Like other mutable scikit-learn estimators, ``fit`` updates this instance in
     place. Use separate estimator instances for concurrent fitting; read-only
     prediction on an already fitted instance is safe.
+
+    Args:
+        n_pairs: number of disjoint pairs ``k`` (positive odd int), or
+            ``"auto"`` to choose ``k`` by cross-validation up to ``max_pairs``.
+        max_pairs: upper bound on ``k`` searched when ``n_pairs="auto"``.
+        cv: cross-validation splitter for ``n_pairs="auto"``; leave-one-out
+            when ``None``.
+        multiclass: ``"ovr"`` (one-vs-rest) or ``"ovo"`` (one-vs-one).
+        exact_pairs: score all feature pairs, bypassing the rank screen.
+        max_features: cap on screened candidate features, or ``None`` for all.
     """
+
+    # Fitted attributes whose static type mypy cannot infer through sklearn's
+    # untyped validators. ``k_`` is a scalar for binary tasks, an array otherwise.
+    classes_: np.ndarray
+    k_: int | np.ndarray
 
     def __init__(
         self,
@@ -48,6 +66,11 @@ class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
         self.max_features = max_features
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> TSPClassifier:
+        """Fit the classifier on ``X`` (``n_samples, n_features``) and labels ``y``.
+
+        Returns:
+            self, fitted in place.
+        """
         X_checked, y_checked = check_X_y(X, y, dtype=np.float64, ensure_all_finite=True)
         check_classification_targets(y_checked)
         X_checked = np.ascontiguousarray(X_checked, dtype=np.float64)
@@ -56,7 +79,7 @@ class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
         self.classes_ = np.unique(y_checked)
         self.n_features_in_ = X_checked.shape[1]
         if self.classes_.size < 2:
-            raise ValueError("TSPClassifier needs at least two classes.")
+            raise TSPValueError("TSPClassifier needs at least two classes.")
 
         if self.classes_.size == 2:
             y01 = (y_checked == self.classes_[1]).astype(np.int32)
@@ -95,12 +118,17 @@ class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
                 self.estimators_.append(model)
                 self.tasks_.append((negative_class, positive_class))
         else:
-            raise ValueError("multiclass must be 'ovr' or 'ovo'.")
+            raise TSPValueError("multiclass must be 'ovr' or 'ovo'.")
 
         self.k_ = np.array([model.k for model in self.estimators_], dtype=np.int32)
         return self
 
     def predict(self, X: np.ndarray) -> np.ndarray:
+        """Predict class labels for ``X``.
+
+        Returns:
+            ``(n_samples,)`` array of labels drawn from ``classes_``.
+        """
         check_is_fitted(self, "estimators_")
         X_checked = self._check_predict_input(X)
 
@@ -108,39 +136,36 @@ class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
             return _predict_binary_model(X_checked, self.estimators_[0])
 
         if self.multiclass == "ovr":
-            return self.classes_[np.argmax(self._ovr_scores(X_checked), axis=1)]
+            return cast(np.ndarray, self.classes_[np.argmax(self._ovr_scores(X_checked), axis=1)])
 
-        votes = np.zeros((X_checked.shape[0], self.classes_.size), dtype=np.int32)
-        margins = np.zeros((X_checked.shape[0], self.classes_.size), dtype=np.float64)
-        class_to_index = {cls: idx for idx, cls in enumerate(self.classes_)}
-
-        for model in self.estimators_:
-            negative_idx = class_to_index[model.negative_class]
-            positive_idx = class_to_index[model.positive_class]
-            score = _positive_fraction(X_checked, model)
-            positive_vote = score > 0.5
-            votes[positive_vote, positive_idx] += 1
-            votes[~positive_vote, negative_idx] += 1
-            margin = score - 0.5
-            margins[:, positive_idx] += margin
-            margins[:, negative_idx] -= margin
-
+        votes, margins = self._ovo_votes_and_margins(X_checked)
         # Argmax by (votes, margin) lexicographically, ties to the lowest index.
         # |margin| <= (C - 1) / 2, so margin / C stays in (-0.5, 0.5) and can
         # never bridge a one-vote gap; argmax reproduces the manual tie-break.
         combined = votes + margins / self.classes_.size
-        return self.classes_[np.argmax(combined, axis=1)]
+        return cast(np.ndarray, self.classes_[np.argmax(combined, axis=1)])
 
     def transform(self, X: np.ndarray) -> np.ndarray:
+        """Encode ``X`` as per-pair binary votes.
+
+        Returns:
+            ``(n_samples, sum_k)`` int8 matrix concatenating every model's votes.
+        """
         check_is_fitted(self, "estimators_")
         X_checked = self._check_predict_input(X)
         blocks = [_vote_matrix(X_checked, model) for model in self.estimators_]
         return np.hstack(blocks).astype(np.int8, copy=False)
 
     def fit_transform(self, X: np.ndarray, y: np.ndarray) -> np.ndarray:
+        """Fit on ``X``, ``y`` then return the vote encoding of ``X``."""
         return self.fit(X, y).transform(X)
 
     def decision_function(self, X: np.ndarray) -> np.ndarray:
+        """Signed confidence scores for ``X``.
+
+        Returns:
+            ``(n_samples,)`` for binary tasks, else ``(n_samples, n_classes)``.
+        """
         check_is_fitted(self, "estimators_")
         X_checked = self._check_predict_input(X)
         if self.classes_.size == 2:
@@ -148,39 +173,52 @@ class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
         if self.multiclass == "ovr":
             return self._ovr_scores(X_checked)
 
-        votes = np.zeros((X_checked.shape[0], self.classes_.size), dtype=np.float64)
+        return self._ovo_votes_and_margins(X_checked)[1]
+
+    def _ovr_scores(self, X: np.ndarray) -> np.ndarray:
+        return np.column_stack([_positive_fraction(X, model) for model in self.estimators_])
+
+    def _ovo_votes_and_margins(self, X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """One-vs-one per-class integer votes and signed margins.
+
+        Returns:
+            ``(votes, margins)``, each ``(n_samples, n_classes)``: int32 vote
+            counts and the float64 margin sums (``positive_fraction - 0.5``).
+        """
+        n_samples = X.shape[0]
+        votes = np.zeros((n_samples, self.classes_.size), dtype=np.int32)
+        margins = np.zeros((n_samples, self.classes_.size), dtype=np.float64)
         class_to_index = {cls: idx for idx, cls in enumerate(self.classes_)}
         for model in self.estimators_:
             negative_idx = class_to_index[model.negative_class]
             positive_idx = class_to_index[model.positive_class]
-            score = _positive_fraction(X_checked, model) - 0.5
-            votes[:, positive_idx] += score
-            votes[:, negative_idx] -= score
-        return votes
-
-    def _ovr_scores(self, X: np.ndarray) -> np.ndarray:
-        return np.column_stack(
-            [_positive_fraction(X, model) for model in self.estimators_]
-        )
+            score = _positive_fraction(X, model)
+            positive_vote = score > 0.5
+            votes[positive_vote, positive_idx] += 1
+            votes[~positive_vote, negative_idx] += 1
+            margin = score - 0.5
+            margins[:, positive_idx] += margin
+            margins[:, negative_idx] -= margin
+        return votes, margins
 
     def _validate_parameters(self) -> None:
         if self.n_pairs != "auto":
             if not isinstance(self.n_pairs, int):
-                raise TypeError("n_pairs must be a positive odd integer or 'auto'.")
+                raise TSPTypeError("n_pairs must be a positive odd integer or 'auto'.")
             if self.n_pairs < 1 or self.n_pairs % 2 == 0:
-                raise ValueError("n_pairs must be a positive odd integer.")
+                raise TSPValueError("n_pairs must be a positive odd integer.")
 
         if not isinstance(self.max_pairs, int) or self.max_pairs < 1:
-            raise ValueError("max_pairs must be a positive integer.")
+            raise TSPValueError("max_pairs must be a positive integer.")
         if self.multiclass not in {"ovr", "ovo"}:
-            raise ValueError("multiclass must be 'ovr' or 'ovo'.")
+            raise TSPValueError("multiclass must be 'ovr' or 'ovo'.")
         if self.max_features is not None and self.max_features < 2:
-            raise ValueError("max_features must be at least 2, or None.")
+            raise TSPValueError("max_features must be at least 2, or None.")
 
     def _check_predict_input(self, X: np.ndarray) -> np.ndarray:
         X_checked = check_array(X, dtype=np.float64, ensure_all_finite=True)
         if X_checked.shape[1] != self.n_features_in_:
-            raise ValueError(
+            raise TSPValueError(
                 f"X has {X_checked.shape[1]} features; expected {self.n_features_in_}."
             )
         return np.ascontiguousarray(X_checked, dtype=np.float64)
@@ -194,25 +232,27 @@ class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
     ) -> _BinaryTSPModel:
         counts = np.bincount(y01, minlength=2)
         if counts[0] == 0 or counts[1] == 0:
-            raise ValueError("Each binary TSP task must contain both classes.")
+            raise TSPValueError("Each binary TSP task must contain both classes.")
 
         max_possible = X.shape[1] // 2
         if max_possible < 1:
-            raise ValueError("TSPClassifier needs at least two features.")
+            raise TSPValueError("TSPClassifier needs at least two features.")
 
         if self.n_pairs == "auto":
             max_k = min(self.max_pairs, max_possible)
             if max_k % 2 == 0:
                 max_k -= 1
             if max_k < 1:
-                raise ValueError("No odd k is available for this feature count.")
+                raise TSPValueError("No odd k is available for this feature count.")
             if counts.min() < 2:
-                raise ValueError("n_pairs='auto' needs at least two samples per binary class.")
+                raise TSPValueError("n_pairs='auto' needs at least two samples per binary class.")
             k = self._choose_k_by_cv(X, y01, max_k)
         else:
             k = int(self.n_pairs)
             if k > max_possible:
-                raise ValueError(f"n_pairs={k} needs at least {2 * k} features; got {X.shape[1]}.")
+                raise TSPValueError(
+                    f"n_pairs={k} needs at least {2 * k} features; got {X.shape[1]}."
+                )
 
         return self._fit_binary_fixed(X, y01, negative_class, positive_class, k)
 
@@ -226,7 +266,7 @@ class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
             y_train = y01[train_idx]
             counts = np.bincount(y_train, minlength=2)
             if counts[0] == 0 or counts[1] == 0:
-                raise ValueError("A CV split produced a training fold with one class.")
+                raise TSPValueError("A CV split produced a training fold with one class.")
 
             fold_model = self._fit_binary_fixed(X[train_idx], y_train, 0, 1, max_k)
             for k_idx, k in enumerate(k_values):
@@ -236,7 +276,7 @@ class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
             total += test_idx.size
 
         if total == 0:
-            raise ValueError("CV splitter produced no test samples.")
+            raise TSPValueError("CV splitter produced no test samples.")
         return int(k_values[np.argmin(errors)])
 
     def _fit_binary_fixed(
@@ -250,12 +290,12 @@ class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
         ranks = _rank_rows_average_numba(X)
         features = self._candidate_features(ranks, y01, k)
         if features.size < 2 * k:
-            raise ValueError(
+            raise TSPValueError(
                 f"Need at least {2 * k} candidate features to select {k} disjoint pairs."
             )
 
         counts = np.bincount(y01, minlength=2)
-        pair_i, pair_j, directions, delta_num, gamma, p0, p1 = _score_pairs_numba(
+        pair_i, pair_j, directions, delta_num, gamma = _score_pairs_numba(
             X,
             ranks,
             y01.astype(np.int32, copy=False),
@@ -279,7 +319,7 @@ class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
                 break
 
         if len(selected) != k:
-            raise ValueError(f"Could only select {len(selected)} disjoint pairs, expected {k}.")
+            raise TSPValueError(f"Could only select {len(selected)} disjoint pairs, expected {k}.")
 
         selected_idx = np.asarray(selected, dtype=np.intp)
         denom = float(counts[0] * counts[1])
@@ -290,8 +330,6 @@ class TSPClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
             directions=directions[selected_idx].astype(np.int8),
             delta=delta_num[selected_idx].astype(np.float64) / denom,
             gamma=gamma[selected_idx].astype(np.float64),
-            p_lt_negative=p0[selected_idx].astype(np.float64),
-            p_lt_positive=p1[selected_idx].astype(np.float64),
             candidate_features=features.astype(np.int32, copy=False),
             k=k,
         )

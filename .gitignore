@@ -23,3 +23,7 @@ CLAUDE.local.md
 
 # slop-detector governance config
 .slopconfig.yaml
+
+# archived pre-port sources and stale artifacts
+old/
+

@@ -1,11 +1,24 @@
+"""Numba-accelerated kernels for ranking and exhaustive pair scoring."""
+
 from __future__ import annotations
 
 import numpy as np
 from numba import njit, prange
 
 
-@njit(parallel=True)
+@njit(parallel=True)  # type: ignore[untyped-decorator]  # numba @njit is untyped
 def _rank_rows_average_numba(x: np.ndarray) -> np.ndarray:
+    """Average-rank each row of ``x`` independently.
+
+    Ties receive the mean of the ranks they span, matching ``scipy``'s
+    ``rankdata(method="average")`` applied per row.
+
+    Args:
+        x: ``(n_samples, n_features)`` float matrix.
+
+    Returns:
+        ``(n_samples, n_features)`` float matrix of per-row average ranks.
+    """
     n_samples, n_features = x.shape
     ranks = np.empty((n_samples, n_features), dtype=np.float64)
 
@@ -26,7 +39,7 @@ def _rank_rows_average_numba(x: np.ndarray) -> np.ndarray:
     return ranks
 
 
-@njit(parallel=True)
+@njit(parallel=True)  # type: ignore[untyped-decorator]  # numba @njit is untyped
 def _score_pairs_numba(
     x: np.ndarray,
     ranks: np.ndarray,
@@ -40,9 +53,25 @@ def _score_pairs_numba(
     np.ndarray,
     np.ndarray,
     np.ndarray,
-    np.ndarray,
-    np.ndarray,
 ]:
+    """Score every candidate feature pair for the binary TSP objective.
+
+    For each unordered pair ``(i, j)`` drawn from ``features`` this computes the
+    score-difference numerator (Delta), the rank-difference magnitude (Gamma),
+    and the winning direction.
+
+    Args:
+        x: ``(n_samples, n_features)`` float matrix.
+        ranks: per-row average ranks of ``x``.
+        y01: ``(n_samples,)`` int32 labels in ``{0, 1}``.
+        features: int32 indices of candidate features to pair.
+        n_negative: count of class-0 samples.
+        n_positive: count of class-1 samples.
+
+    Returns:
+        Tuple ``(pair_i, pair_j, directions, delta_num, gamma)``, one entry per
+        unordered pair.
+    """
     n_selected = features.size
     n_pairs = n_selected * (n_selected - 1) // 2
     pair_i = np.empty(n_pairs, dtype=np.int32)
@@ -50,8 +79,6 @@ def _score_pairs_numba(
     directions = np.empty(n_pairs, dtype=np.int8)
     delta_num = np.empty(n_pairs, dtype=np.int64)
     gamma = np.empty(n_pairs, dtype=np.float64)
-    p_lt_negative = np.empty(n_pairs, dtype=np.float64)
-    p_lt_positive = np.empty(n_pairs, dtype=np.float64)
     for local_i in prange(n_selected - 1):
         feature_i = features[local_i]
         base = local_i * (n_selected - 1) - (local_i * (local_i - 1)) // 2
@@ -86,9 +113,7 @@ def _score_pairs_numba(
             mean_diff_negative = rank_diff_negative / n_negative
             mean_diff_positive = rank_diff_positive / n_positive
             gamma[pair_idx] = abs(mean_diff_positive - mean_diff_negative)
-            p_lt_negative[pair_idx] = lt_negative / float(n_negative)
-            p_lt_positive[pair_idx] = lt_positive / float(n_positive)
             pair_i[pair_idx] = feature_i
             pair_j[pair_idx] = feature_j
 
-    return pair_i, pair_j, directions, delta_num, gamma, p_lt_negative, p_lt_positive
+    return pair_i, pair_j, directions, delta_num, gamma
