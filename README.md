@@ -123,15 +123,17 @@ Parameters:
   `n_pairs="auto"`. Default `None` uses leave-one-out cross-validation.
 - `multiclass`: `"ovr"` for one-vs-rest or `"ovo"` for one-vs-one multiclass
   decomposition.
-- `exact_pairs`: scoring-mode switch.
-  - `True`: score every possible pair among all input features. This is the
-    direct Exact All-Pairs mode, and `max_features` is ignored.
-  - `False`: use candidate-screened mode. Features are screened first, then
-    every pair among the retained candidate features is scored exactly.
-- `max_features`: candidate feature limit used only when `exact_pairs=False`.
-  Use an integer such as `512` or `1000` for fast screening. Use `None` to
-  disable the screening step inside candidate-screened mode, so all features are
-  retained as candidates.
+- `exact_pairs`: controls whether feature screening is allowed.
+  - `True`: retain all input features and score every possible feature pair.
+    `max_features` is ignored.
+  - `False`: construct the candidate feature set using `max_features`. If
+    `max_features=None` or `max_features >= n_features`, no screening is
+    performed and all feature pairs are scored.
+- `max_features`: requested candidate-feature limit when `exact_pairs=False`.
+  An integer smaller than `n_features` enables rank-based screening. The actual
+  candidate count is `min(n_features, max(max_features, 2 * k))`, ensuring that
+  enough features remain to select `k` disjoint pairs. `None` disables screening
+  and is computationally equivalent to `exact_pairs=True`.
 
 Learned attributes for binary models:
 
@@ -140,8 +142,8 @@ Learned attributes for binary models:
 - `delta_`: primary TSP score for each selected pair.
 - `gamma_`: rank-difference tie-break score for each selected pair.
 - `k_`: selected number of pairs.
-- `candidate_features_`: features retained before pair scoring in screened
-  mode.
+- `candidate_features_`: feature indices retained for pair scoring. Contains all
+  feature indices when screening is disabled.
 
 For multiclass models, binary submodels are stored in `estimators_`, and their
 tasks are stored in `tasks_`.
@@ -159,9 +161,9 @@ There are three practical configurations:
 
 | Configuration | What happens | Typical use |
 | --- | --- | --- |
-| `exact_pairs=True` | Directly scores all `p * (p - 1) / 2` feature pairs. `max_features` is ignored. | Exact reference runs, moderate feature counts. |
-| `exact_pairs=False, max_features=N` | Keeps up to `N` candidate features, then scores all pairs among those candidates. | Default fast mode for high-dimensional matrices. |
-| `exact_pairs=False, max_features=None` | Keeps all features as candidates, then scores all pairs through the candidate-screened code path. | Small datasets where you want the screened-mode API but no prefilter. |
+| `exact_pairs=True` | Retains all `p` features and scores all `p * (p - 1) / 2` pairs. `max_features` is ignored. | Explicit exhaustive all-pairs scoring. |
+| `exact_pairs=False, max_features=N` | Retains `min(p, max(N, 2 * k))` candidate features, then scores all pairs among them. | Fast mode for high-dimensional matrices. |
+| `exact_pairs=False, max_features=None` | Retains all `p` features and scores all `p * (p - 1) / 2` pairs. This is computationally equivalent to `exact_pairs=True`. | Compatibility or testing; prefer `exact_pairs=True` for clarity. |
 
 ### Exact All-Pairs Scoring
 
@@ -184,16 +186,10 @@ clf = TSPClassifier(n_pairs=3, exact_pairs=True, max_features=512)
 # max_features is ignored because exact_pairs=True.
 ```
 
-### Slow Candidate-Screened Scoring For Small Feature Spaces
+### Exhaustive Scoring With `max_features=None`
 
-For small feature-space datasets, this mode keeps the candidate-screened branch
-but disables the screening step by setting `max_features=None`. Every feature is
-retained as a candidate, then all candidate pairs are scored.
-
-This is not the recommended way to ask for exact all-pairs scoring. Prefer
-`exact_pairs=True` for that. Use this mode only when you specifically want to
-exercise the same `exact_pairs=False` API branch you plan to use later with
-`max_features=N`.
+When `exact_pairs=False` and `max_features=None`, feature screening is disabled.
+All input features are retained and all possible feature pairs are scored.
 
 ```python
 clf = TSPClassifier(
@@ -209,13 +205,16 @@ print(clf.delta_)
 print(clf.gamma_)
 ```
 
-Because all features are retained, this can still be slow when `p` is large.
+This configuration is computationally equivalent to `exact_pairs=True` because
+both retain every input feature and pass the same complete feature set to the
+same exhaustive pair-scoring kernel. Prefer `exact_pairs=True` when exhaustive
+scoring is intended, because it expresses that intent more clearly.
 
 ### Fast Candidate-Screened Scoring
 
-This is the default mode for larger expression matrices. The model first keeps
-up to `max_features` candidates, then scores every pair among those retained
-features.
+This is the default mode for larger expression matrices. The model retains
+`min(p, max(max_features, 2 * k))` candidate features, then scores every pair
+among those retained features.
 
 ```python
 clf = TSPClassifier(
