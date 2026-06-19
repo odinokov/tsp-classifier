@@ -1,5 +1,7 @@
 # tspfs
 
+![tspfs pipeline](docs/images/tspfs.png)
+
 `tspfs` is a scikit-learn compatible implementation of Top-Scoring
 Pairs (TSP/k-TSP) classifiers for gene expression and other high-dimensional
 biological matrices. The main estimator is `TSPClassifier`.
