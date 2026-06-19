@@ -157,18 +157,16 @@ catch `tspfs.TSPError` to handle any tspfs-specific error.
 
 ## Scoring Modes
 
-There are three practical configurations:
+Two modes control how many feature pairs are scored:
 
-| Configuration | What happens | Typical use |
-| --- | --- | --- |
-| `exact_pairs=True` | Retains all `p` features and scores all `p * (p - 1) / 2` pairs. `max_features` is ignored. | Explicit exhaustive all-pairs scoring. |
-| `exact_pairs=False, max_features=N` | Retains `min(p, max(N, 2 * k))` candidate features, then scores all pairs among them. | Fast mode for high-dimensional matrices. |
-| `exact_pairs=False, max_features=None` | Retains all `p` features and scores all `p * (p - 1) / 2` pairs. This is computationally equivalent to `exact_pairs=True`. | Compatibility or testing; prefer `exact_pairs=True` for clarity. |
+| Mode | Set | What happens | Use when |
+| --- | --- | --- | --- |
+| Exhaustive | `exact_pairs=True` | Scores all `p * (p - 1) / 2` pairs. `max_features` is ignored. | Moderate feature counts; you want an exact scan. |
+| Screened (fast) | `exact_pairs=False, max_features=N` | Keeps `min(p, max(N, 2 * k))` top features, then scores all pairs among them. | High-dimensional matrices. |
 
-### Exact All-Pairs Scoring
+`exact_pairs=False, max_features=None` disables screening and is identical to `exact_pairs=True`.
 
-Use this when the feature space is moderate or when you need a fully exact
-all-pairs scan. This is the clearest way to request exact TSP pair scoring.
+### Exhaustive Scoring
 
 ```python
 clf = TSPClassifier(n_pairs=3, exact_pairs=True)
@@ -179,40 +177,9 @@ print(clf.delta_)
 print(clf.gamma_)
 ```
 
-`max_features` has no effect in this mode:
-
-```python
-clf = TSPClassifier(n_pairs=3, exact_pairs=True, max_features=512)
-# max_features is ignored because exact_pairs=True.
-```
-
-### Exhaustive Scoring With `max_features=None`
-
-When `exact_pairs=False` and `max_features=None`, feature screening is disabled.
-All input features are retained and all possible feature pairs are scored.
-
-```python
-clf = TSPClassifier(
-    n_pairs=3,
-    exact_pairs=False,
-    max_features=None,
-)
-clf.fit(X_train, y_train)
-
-print(clf.candidate_features_)
-print(clf.pairs_)
-print(clf.delta_)
-print(clf.gamma_)
-```
-
-This configuration is computationally equivalent to `exact_pairs=True` because
-both retain every input feature and pass the same complete feature set to the
-same exhaustive pair-scoring kernel. Prefer `exact_pairs=True` when exhaustive
-scoring is intended, because it expresses that intent more clearly.
-
 ### Fast Candidate-Screened Scoring
 
-This is the default mode for larger expression matrices. The model retains
+The default for larger expression matrices. The model retains
 `min(p, max(max_features, 2 * k))` candidate features, then scores every pair
 among those retained features.
 
